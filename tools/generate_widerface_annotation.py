@@ -1,20 +1,9 @@
+import argparse
 import os
 from PIL import Image
 
-data_dir = "/media/hiep/Ubuntu/datasets/wider-face/original/wider_face_split"
 
-val_bbox_file = os.path.join(data_dir, "wider_face_val_bbx_gt.txt")
-train_bbox_file = os.path.join(data_dir, "wider_face_train_bbx_gt.txt")
-
-image_dir = "/media/hiep/Ubuntu/datasets/wider-face/original"
-val_data_folder = os.path.join(image_dir, "WIDER_val")
-train_data_folder = os.path.join(image_dir, "WIDER_train")
-
-out_file_train = os.path.join(image_dir, "WIDER_train_1.txt")
-out_file_val = os.path.join(image_dir, "WIDER_val_1.txt")
-
-
-def generate_train_file(bbx_file, data_folder, out_file):
+def generate_widerface_to_VOC(bbx_file, data_folder, out_file):
     paths_list, names_list = traverse_dir_files(data_folder)
     name_dict = dict()
     for path, name in zip(paths_list, names_list):
@@ -135,6 +124,26 @@ def write_line(file_name, line):
         else:
             fs.write("%s\n" % line)
 
+
 if __name__ == '__main__':
-    generate_train_file(val_bbox_file, val_data_folder, out_file_val)
-    generate_train_file(train_bbox_file, train_data_folder, out_file_train)
+    parser = argparse.ArgumentParser(description='''
+                                    --dataset Input your WIDER FACE dataset path''')
+    parser.add_argument('--dataset', default='', help='Path to WIDER FACE dataset')
+
+    args = parser.parse_args()
+
+    annotation_path = "wider_face_split"
+    wider_face_dir = args.dataset
+    annotation_dir = os.path.join(wider_face_dir, annotation_path)
+
+    val_bbox_file = os.path.join(annotation_dir, "wider_face_val_bbx_gt.txt")
+    train_bbox_file = os.path.join(annotation_dir, "wider_face_train_bbx_gt.txt")
+
+    val_data_folder = os.path.join(wider_face_dir, "WIDER_val")
+    train_data_folder = os.path.join(wider_face_dir, "WIDER_train")
+
+    out_file_train = "../data/WIDER_train.txt"
+    out_file_val = "../data/WIDER_val.txt"
+
+    generate_widerface_to_VOC(val_bbox_file, val_data_folder, out_file_val)
+    generate_widerface_to_VOC(train_bbox_file, train_data_folder, out_file_train)

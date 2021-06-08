@@ -19,7 +19,7 @@ __C.YOLO.DEMO_WEIGHT = "./checkpoint/yolov3_coco_demo.ckpt"
 # Train options
 __C.YOLO.TRAIN = edict()
 
-__C.YOLO.TRAIN.ANNOT_PATH = "../data/WIDER_train_1.txt"
+__C.YOLO.TRAIN.ANNOT_PATH = "../data/WIDER_train.txt"
 __C.YOLO.TRAIN.BATCH_SIZE = 6
 # __C.YOLO.TRAIN.INPUT_SIZE = [320, 352, 384, 416, 448, 480, 512, 544, 576, 608]
 __C.YOLO.TRAIN.INPUT_SIZE = [416]
@@ -33,7 +33,7 @@ __C.YOLO.TRAIN.INITIAL_WEIGHT = "./checkpoint/yolov3_coco_demo.ckpt"
 # Test options
 __C.YOLO.TEST = edict()
 
-__C.YOLO.TEST.ANNOT_PATH = "../data/WIDER_val_1.txt"
+__C.YOLO.TEST.ANNOT_PATH = "../data/WIDER_val.txt"
 __C.YOLO.TEST.BATCH_SIZE = 2
 __C.YOLO.TEST.INPUT_SIZE = 544
 __C.YOLO.TEST.DATA_AUG = False
