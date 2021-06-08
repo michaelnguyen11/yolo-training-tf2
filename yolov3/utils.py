@@ -6,16 +6,18 @@ import cv2
 from config import cfg
 
 
-def read_class_name(class_file_name):
+def read_class_names(class_file_name):
+    """loads class name from a file"""
     names = {}
-    with open(class_file_name, 'r') as f:
-        for id, name in enumerate(f):
-            names[id] = name.strip('\n')
+    with open(class_file_name, 'r') as data:
+        for ID, name in enumerate(data):
+            names[ID] = name.strip('\n')
     return names
 
 
 def get_anchors(anchors_path):
-    with open(anchors_path, 'r') as f:
+    """loads the anchors from a file"""
+    with open(anchors_path) as f:
         anchors = f.readline()
     anchors = np.array(anchors.split(','), dtype=np.float32)
     return anchors.reshape(3, 3, 2)
@@ -47,7 +49,7 @@ def draw_bbox(image, bboxes, classes=None, show_label=True):
     # bboxes : [x_min, y_min, x_max, y_max, probability, cls_id] format coordinates
 
     if classes is None:
-        classes = read_class_name(cfg.YOLO.CLASSES)
+        classes = read_class_names(cfg.YOLO.CLASSES)
 
     num_classes = len(classes)
     image_h, image_w, _ = image.shape
@@ -100,11 +102,10 @@ def bboxes_iou(boxes1, boxes2):
 
 def nms(bboxes, iou_threshold, sigma=0.3, method='nms'):
     """
-    bboxes: (xmin, ymin, xmax, ymax, score, class)
+    :param bboxes: (xmin, ymin, xmax, ymax, score, class)
     Note: soft-nms, https://arxiv.org/pdf/1704.04503.pdf
           https://github.com/bharatsingh430/soft-nms
     """
-
     classes_in_img = list(set(bboxes[:, 5]))
     best_bboxes = []
 
@@ -147,7 +148,6 @@ def postprocess_bboxes(pred_bbox, image_shape, input_size, score_threshold):
     # (x, y, w, h) --> (xmin, ymin, xmax, ymax)
     pred_coor = np.concatenate([pred_xywh[:, :2] - pred_xywh[:, 2:] * 0.5,
                                 pred_xywh[:, :2] + pred_xywh[:, 2:] * 0.5], axis=-1)
-
     # # (2) (xmin, ymin, xmax, ymax) -> (xmin_org, ymin_org, xmax_org, ymax_org)
     org_h, org_w, _ = image_shape
     resize_ratio = min(input_size / org_w, input_size / org_h)

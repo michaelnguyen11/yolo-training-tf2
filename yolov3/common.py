@@ -20,11 +20,11 @@ def convolution(inputs, filters, downsample=False, activate=True, bn=True):
     if downsample:
         # padding=((top_pad, bottom_pad), (left_pad, right_pad))
         inputs = tf.keras.layers.ZeroPadding2D(((1, 0), (1, 0)))(inputs)
-        padding = 'VALID'
+        padding = 'valid'
         strides = 2
     else:
-        padding = 'SAME'
         strides = 1
+        padding = 'same'
 
     conv = tf.keras.layers.Conv2D(filters=filters[-1], kernel_size=filters[0], strides=strides, padding=padding,
                                   use_bias=not bn, kernel_regularizer=tf.keras.regularizers.l2(0.0005),
@@ -32,6 +32,7 @@ def convolution(inputs, filters, downsample=False, activate=True, bn=True):
                                   bias_initializer=tf.constant_initializer(0.))(inputs)
     if bn:
         conv = BatchNormalization()(conv)
+
     if activate:
         conv = tf.nn.leaky_relu(conv, alpha=0.1)
 
@@ -47,7 +48,11 @@ def residual_block(inputs, input_channel, filter_num1, filter_num2):
     return residual_output
 
 
-def upsample(inputs, method="deconv"):
+def upsample(inputs):
+    return tf.image.resize(inputs, (inputs.shape[1] * 2, inputs.shape[2] * 2), method='nearest')
+
+
+def upsample2(inputs, method="deconv"):
     global output
     assert method in ["resize", "deconv"]
 

@@ -5,7 +5,7 @@ import utils
 import backbone
 import common
 
-NUM_CLASS = len(utils.read_class_name(cfg.YOLO.CLASSES))
+NUM_CLASS = len(utils.read_class_names(cfg.YOLO.CLASSES))
 ANCHORS = utils.get_anchors(cfg.YOLO.ANCHORS)
 STRIDES = np.array(cfg.YOLO.STRIDES)
 IOU_LOSS_THRESH = cfg.YOLO.IOU_LOSS_THRESH
@@ -55,7 +55,7 @@ def YOLOv3(inputs):
     return [conv_sbbox, conv_mbbox, conv_lbbox]
 
 
-def decode(conv_output, i=0):
+def decode(conv_output, i):
     # where i = [0, 1, 2] corresponds to three grid sizes respectively
     """
     return tensor of shape [batch_size, output_size, output_size, anchor_per_scale, 5 + num_classes]
@@ -213,34 +213,45 @@ def compute_loss(pred, conv, label, bboxes, i=0):
     conv_raw_prob = conv[:, :, :, :, 5:]
 
     pred_xywh = pred[:, :, :, :, 0:4]
-    pred_conf = pred[:, :, :, :, 4:5]
+    pred_confident = pred[:, :, :, :, 4:5]
 
     label_xywh = label[:, :, :, :, 0:4]
-    label_conf = label[:, :, :, :, 4:5]
+    # confidence level, it is determined whether or object within a grid
+    label_confident = label[:, :, :, :, 4:5]
     label_prob = label[:, :, :, :, 5:]
 
     giou = tf.expand_dims(bbox_giou(pred_xywh, label_xywh), axis=-1)
     input_size = tf.cast(input_size, tf.float32)
 
-    # The smaller the size of the bounding box, the larger the value of bbox_loss_scale
     bbox_loss_scale = 2.0 - 1.0 * label_xywh[:, :, :, :, 2:3] * label_xywh[:, :, :, :, 3:4] / (input_size ** 2)
-    bbox_loss = label_conf * bbox_loss_scale * (1 - giou)
+    box_regression_loss = label_confident * bbox_loss_scale * (1 - giou)
 
     iou = bbox_iou(pred_xywh[:, :, :, :, np.newaxis, :], bboxes[:, np.newaxis, np.newaxis, np.newaxis, :, :])
+    # Find out the iou value of the real box The largest prediction box
     max_iou = tf.expand_dims(tf.reduce_max(iou, axis=-1), axis=-1)
 
-    response_background = (1.0 - label_conf) * tf.cast(max_iou < IOU_LOSS_THRESH, tf.float32)
-    conf_focal = tf.pow(label_conf - pred_conf, 2)
+    # If the largest iou is less than the threshold,
+    # then it is considered that the prediction box does not contain objects,
+    # and it is the background box
+    respond_bgd = (1.0 - label_confident) * tf.cast(max_iou < IOU_LOSS_THRESH, tf.float32)
 
-    conf_loss = conf_focal * (
-            label_conf * tf.nn.sigmoid_cross_entropy_with_logits(labels=label_conf, logits=conv_raw_conf)
-            + response_background * tf.nn.sigmoid_cross_entropy_with_logits(labels=label_conf,
-                                                                            logits=conv_raw_conf))
+    conf_focal = tf.pow(label_confident - pred_confident, 2)
 
-    prob_loss = label_conf * tf.nn.sigmoid_cross_entropy_with_logits(labels=label_prob, logits=conv_raw_prob)
+    # Calculate the loss of confidence
+    # we hope that if the grid contains objects,
+    # then the network will output The confidence of the prediction box is 1,
+    # and it is 0 when there is no object.
+    confidence_loss = conf_focal * (
+            label_confident * tf.nn.sigmoid_cross_entropy_with_logits(labels=label_confident, logits=conv_raw_conf)
+            +
+            respond_bgd * tf.nn.sigmoid_cross_entropy_with_logits(labels=label_confident, logits=conv_raw_conf)
+    )
 
-    bbox_loss = tf.reduce_mean(tf.reduce_sum(bbox_loss, axis=[1, 2, 3, 4]))
-    conf_loss = tf.reduce_mean(tf.reduce_sum(conf_loss, axis=[1, 2, 3, 4]))
-    prob_loss = tf.reduce_mean(tf.reduce_sum(prob_loss, axis=[1, 2, 3, 4]))
+    classification_loss = label_confident * tf.nn.sigmoid_cross_entropy_with_logits(labels=label_prob,
+                                                                                    logits=conv_raw_prob)
 
-    return bbox_loss, conf_loss, prob_loss
+    box_regression_loss = tf.reduce_mean(tf.reduce_sum(box_regression_loss, axis=[1, 2, 3, 4]))
+    confidence_loss = tf.reduce_mean(tf.reduce_sum(confidence_loss, axis=[1, 2, 3, 4]))
+    classification_loss = tf.reduce_mean(tf.reduce_sum(classification_loss, axis=[1, 2, 3, 4]))
+
+    return box_regression_loss, confidence_loss, classification_loss

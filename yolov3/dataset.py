@@ -9,28 +9,30 @@ from config import cfg
 
 
 class Dataset(object):
-    def __init__(self, data_type):
-        self.anno_path = cfg.YOLO.TRAIN.ANNOT_PATH if data_type == 'train' else cfg.YOLO.TEST.ANNOT_PATH
-        self.input_sizes = cfg.YOLO.TRAIN.INPUT_SIZE if data_type == 'train' else cfg.YOLO.TEST.INPUT_SIZE
-        self.batch_size = cfg.YOLO.TRAIN.BATCH_SIZE if data_type == 'train' else cfg.YOLO.TEST.BATCH_SIZE
-        self.data_aug = cfg.YOLO.TRAIN.DATA_AUG if data_type == 'train' else cfg.YOLO.TEST.DATA_AUG
+    """implement Dataset here"""
+
+    def __init__(self, dataset_type):
+        self.annot_path = cfg.YOLO.TRAIN.ANNOT_PATH if dataset_type == 'train' else cfg.YOLO.TEST.ANNOT_PATH
+        self.input_sizes = cfg.YOLO.TRAIN.INPUT_SIZE if dataset_type == 'train' else cfg.YOLO.TEST.INPUT_SIZE
+        self.batch_size = cfg.YOLO.TRAIN.BATCH_SIZE if dataset_type == 'train' else cfg.YOLO.TEST.BATCH_SIZE
+        self.data_aug = cfg.YOLO.TRAIN.DATA_AUG if dataset_type == 'train' else cfg.YOLO.TEST.DATA_AUG
 
         self.train_input_sizes = cfg.YOLO.TRAIN.INPUT_SIZE
         self.strides = np.array(cfg.YOLO.STRIDES)
-        self.classes = utils.read_class_name(cfg.YOLO.CLASSES)
+        self.classes = utils.read_class_names(cfg.YOLO.CLASSES)
         self.num_classes = len(self.classes)
         self.anchors = np.array(utils.get_anchors(cfg.YOLO.ANCHORS))
         self.anchor_per_scale = cfg.YOLO.ANCHOR_PER_SCALE
         self.max_bbox_per_scale = 150
 
-        self.annotations = self.load_annotations(data_type)
+        self.annotations = self.load_annotations()
         self.num_samples = len(self.annotations)
         self.num_batches = int(np.ceil(self.num_samples / self.batch_size))
         self.batch_count = 0
 
-    def load_annotations(self, data_type):
-        with open(self.anno_path, 'r') as f:
-            txt = f.readline()
+    def load_annotations(self):
+        with open(self.annot_path, 'r') as f:
+            txt = f.readlines()
             annotations = [line.strip() for line in txt if len(line.strip().split()[1:]) != 0]
         np.random.shuffle(annotations)
         return annotations
@@ -43,8 +45,7 @@ class Dataset(object):
             self.train_input_size = random.choice(self.train_input_sizes)
             self.train_output_sizes = self.train_input_size // self.strides
 
-            batch_image = np.zeros((self.batch_count, self.train_input_size, self.train_input_size, 3),
-                                   dtype=np.float32)
+            batch_image = np.zeros((self.batch_size, self.train_input_size, self.train_input_size, 3), dtype=np.float32)
 
             batch_label_sbbox = np.zeros((self.batch_size, self.train_output_sizes[0], self.train_output_sizes[0],
                                           self.anchor_per_scale, 5 + self.num_classes), dtype=np.float32)
@@ -75,9 +76,7 @@ class Dataset(object):
                     batch_sbboxes[num, :, :] = sbboxes
                     batch_mbboxes[num, :, :] = mbboxes
                     batch_lbboxes[num, :, :] = lbboxes
-
                     num += 1
-
                 self.batch_count += 1
                 batch_small_target = batch_label_sbbox, batch_sbboxes
                 batch_medium_target = batch_label_mbbox, batch_mbboxes
@@ -98,7 +97,6 @@ class Dataset(object):
         return image, bboxes
 
     def random_crop(self, image, bboxes):
-
         if random.random() < 0.5:
             h, w, _ = image.shape
             max_bbox = np.concatenate([np.min(bboxes[:, 0:2], axis=0), np.max(bboxes[:, 2:4], axis=0)], axis=-1)
@@ -121,7 +119,6 @@ class Dataset(object):
         return image, bboxes
 
     def random_translate(self, image, bboxes):
-
         if random.random() < 0.5:
             h, w, _ = image.shape
             max_bbox = np.concatenate([np.min(bboxes[:, 0:2], axis=0), np.max(bboxes[:, 2:4], axis=0)], axis=-1)
@@ -157,7 +154,7 @@ class Dataset(object):
             image, bboxes = self.random_translate(np.copy(image), np.copy(bboxes))
 
         image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-        image, bboxes = utils.image_preporcess(np.copy(image), [self.train_input_size, self.train_input_size],
+        image, bboxes = utils.image_preprocess(np.copy(image), [self.train_input_size, self.train_input_size],
                                                np.copy(bboxes))
         return image, bboxes
 
@@ -182,30 +179,7 @@ class Dataset(object):
 
         return inter_area / union_area
 
-    def bbox_iou2(self, boxes1, boxes2):
-        boxes1 = np.array(boxes1)
-        boxes2 = np.array(boxes2)
-
-        # determine the (x, y)-coordinates of the intersection rectangle
-        xA = max(boxes1[0], boxes2[0])
-        yA = max(boxes1[1], boxes2[1])
-        xB = min(boxes1[2], boxes2[2])
-        yB = min(boxes1[3], boxes2[3])
-        # compute the area of intersection rectangle
-        interArea = max(0, xB - xA + 1) * max(0, yB - yA + 1)
-        # compute the area of both the prediction and ground-truth
-        # rectangles
-        boxAArea = (boxes1[2] - boxes1[0] + 1) * (boxes1[3] - boxes1[1] + 1)
-        boxBArea = (boxes2[2] - boxes2[0] + 1) * (boxes2[3] - boxes2[1] + 1)
-        # compute the intersection over union by taking the intersection
-        # area and dividing it by the sum of prediction + ground-truth
-        # areas - the interesection area
-        iou = interArea / float(boxAArea + boxBArea - interArea)
-        # return the intersection over union value
-        return iou
-
     def preprocess_true_boxes(self, bboxes):
-
         label = [np.zeros((self.train_output_sizes[i], self.train_output_sizes[i], self.anchor_per_scale,
                            5 + self.num_classes)) for i in range(3)]
         bboxes_xywh = [np.zeros((self.max_bbox_per_scale, 4)) for _ in range(3)]
@@ -263,9 +237,32 @@ class Dataset(object):
                 bbox_ind = int(bbox_count[best_detect] % self.max_bbox_per_scale)
                 bboxes_xywh[best_detect][bbox_ind, :4] = bbox_xywh
                 bbox_count[best_detect] += 1
+
         label_sbbox, label_mbbox, label_lbbox = label
         sbboxes, mbboxes, lbboxes = bboxes_xywh
         return label_sbbox, label_mbbox, label_lbbox, sbboxes, mbboxes, lbboxes
 
     def __len__(self):
         return self.num_batches
+
+    def bbox_iou2(self, boxes1, boxes2):
+        boxes1 = np.array(boxes1)
+        boxes2 = np.array(boxes2)
+
+        # determine the (x, y)-coordinates of the intersection rectangle
+        xA = max(boxes1[0], boxes2[0])
+        yA = max(boxes1[1], boxes2[1])
+        xB = min(boxes1[2], boxes2[2])
+        yB = min(boxes1[3], boxes2[3])
+        # compute the area of intersection rectangle
+        interArea = max(0, xB - xA + 1) * max(0, yB - yA + 1)
+        # compute the area of both the prediction and ground-truth
+        # rectangles
+        boxAArea = (boxes1[2] - boxes1[0] + 1) * (boxes1[3] - boxes1[1] + 1)
+        boxBArea = (boxes2[2] - boxes2[0] + 1) * (boxes2[3] - boxes2[1] + 1)
+        # compute the intersection over union by taking the intersection
+        # area and dividing it by the sum of prediction + ground-truth
+        # areas - the interesection area
+        iou = interArea / float(boxAArea + boxBArea - interArea)
+        # return the intersection over union value
+        return iou
